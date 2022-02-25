@@ -9,11 +9,11 @@
 extern crate errno;
 extern crate libc;
 
-use errno::{Errno, errno};
+use errno::{errno, Errno};
 use std::error;
 use std::ffi::{OsStr, OsString};
-use std::iter::{IntoIterator, Iterator};
 use std::fmt;
+use std::iter::{IntoIterator, Iterator};
 use std::ptr;
 
 /// Represents an error calling `exec`.
@@ -37,10 +37,8 @@ impl error::Error for Error {}
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Error::NullByteInArgument =>
-                write!(f, "interior NUL byte in string argument to exec"),
-            Error::Errno(err) =>
-                write!(f, "couldn't exec process: {}", err),
+            Error::NullByteInArgument => write!(f, "interior NUL byte in string argument to exec"),
+            Error::Errno(err) => write!(f, "couldn't exec process: {}", err),
         }
     }
 }
@@ -79,41 +77,37 @@ macro_rules! exec_try {
 /// println!("Error: {}", err);
 /// ```
 pub fn execvp<S, I>(program: S, args: I) -> Error
-    where S: AsRef<OsStr>, I: IntoIterator, I::Item: AsRef<OsStr>
+where
+    S: AsRef<OsStr>,
+    I: IntoIterator,
+    I::Item: AsRef<OsStr>,
 {
     execvp_impl(program, args)
 }
 
 #[cfg(unix)]
 fn execvp_impl<S, I>(program: S, args: I) -> Error
-    where S: AsRef<OsStr>, I: IntoIterator, I::Item: AsRef<OsStr>
+where
+    S: AsRef<OsStr>,
+    I: IntoIterator,
+    I::Item: AsRef<OsStr>,
 {
     use std::ffi::CString;
     use std::os::unix::ffi::OsStrExt;
 
     // Add null terminations to our strings and our argument array,
     // converting them into a C-compatible format.
-    let program_cstring = exec_try!(
-        CString::new(program.as_ref().as_bytes())
-            .map_err(|_| Error::NullByteInArgument)
-    );
-    let arg_cstrings = exec_try!(
-        args.into_iter()
-            .map(|arg| {
-                CString::new(arg.as_ref().as_bytes())
-                    .map_err(|_| Error::NullByteInArgument)
-            })
-            .collect::<Result<Vec<_>, _>>()
-    );
-    let mut arg_charptrs: Vec<_> = arg_cstrings.iter()
-        .map(|arg| arg.as_ptr())
-        .collect();
+    let program_cstring =
+        exec_try!(CString::new(program.as_ref().as_bytes()).map_err(|_| Error::NullByteInArgument));
+    let arg_cstrings = exec_try!(args
+        .into_iter()
+        .map(|arg| { CString::new(arg.as_ref().as_bytes()).map_err(|_| Error::NullByteInArgument) })
+        .collect::<Result<Vec<_>, _>>());
+    let mut arg_charptrs: Vec<_> = arg_cstrings.iter().map(|arg| arg.as_ptr()).collect();
     arg_charptrs.push(ptr::null());
 
     // Use an `unsafe` block so that we can call directly into C.
-    let res = unsafe {
-        libc::execvp(program_cstring.as_ptr(), arg_charptrs.as_ptr())
-    };
+    let res = unsafe { libc::execvp(program_cstring.as_ptr(), arg_charptrs.as_ptr()) };
 
     // Handle our error result.
     if res < 0 {
@@ -125,15 +119,11 @@ fn execvp_impl<S, I>(program: S, args: I) -> Error
 }
 
 #[cfg(windows)]
-extern "C" {
-    // https://docs.microsoft.com/en-us/cpp/c-runtime-library/reference/execvp-wexecvp
-    pub fn _wexecvp(cmdname: *const libc::wchar_t, argv: *const *const libc::wchar_t)
-        -> libc::intptr_t;
-}
-
-#[cfg(windows)]
 fn execvp_impl<S, I>(program: S, args: I) -> Error
-    where S: AsRef<OsStr>, I: IntoIterator, I::Item: AsRef<OsStr>
+where
+    S: AsRef<OsStr>,
+    I: IntoIterator,
+    I::Item: AsRef<OsStr>,
 {
     use std::os::windows::ffi::OsStrExt;
 
@@ -150,22 +140,21 @@ fn execvp_impl<S, I>(program: S, args: I) -> Error
     };
 
     let program_wide = exec_try!(wcstring(program.as_ref()));
-    let args_wide = exec_try!(args.into_iter()
+    let args_wide = exec_try!(args
+        .into_iter()
         .map(|arg| wcstring(arg.as_ref()))
         .collect::<Result<Vec<_>, _>>());
     let mut arg_ptrs: Vec<_> = args_wide.iter().map(|arg| arg.as_ptr()).collect();
     arg_ptrs.push(ptr::null());
 
-    let res = unsafe {
-        _wexecvp(program_wide.as_ptr(), arg_ptrs.as_ptr())
-    };
+    let res = unsafe { libc::wexecvp(program_wide.as_ptr(), arg_ptrs.as_ptr()) };
 
     // Handle our error result.
     if res < 0 {
         Error::Errno(errno())
     } else {
         // Should never happen.
-        panic!("_wexecvp returned unexpectedly")
+        panic!("wexecvp returned unexpectedly")
     }
 }
 
@@ -191,7 +180,7 @@ impl Command {
     /// program will be searched for using the usual rules for `PATH`.
     pub fn new<S: AsRef<OsStr>>(program: S) -> Command {
         Command {
-            argv: vec!(program.as_ref().to_owned()),
+            argv: vec![program.as_ref().to_owned()],
         }
     }
 
